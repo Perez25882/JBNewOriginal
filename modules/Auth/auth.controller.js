@@ -158,6 +158,9 @@ export const signUp = async (req, res, next) => {
 }
 
 
+
+
+
 //USER TRYING TO LOG INTO AN THIER ACCOUNT
 export const signIn = async (req, res, next) => {
 
@@ -191,9 +194,6 @@ export const signIn = async (req, res, next) => {
             throw error;
         };
 
-        //  const token = jwt.sign({id: user._id }, JWT_SECRET, {expiresIn : JWT_EXPIRES_IN});
-        // const token = jwt.sign({ id: user._id, role: user.role, email: user.email, isAccountVerified: user.isAccountVerified, }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-
 
 
         //THIS IS THE NEW THING I ADDED BELOW
@@ -206,26 +206,6 @@ export const signIn = async (req, res, next) => {
         user.refreshToken = tokens.refreshToken; //put it in the user model refreshToken field
         await user.save(); //save the user with the new tokens
 
-
-
-        //TRYING TO FIX SAFARI LOGIN ISSUE
-
-        // // // store access token in cookie (short-lived)
-        // res.cookie('token', tokens.accessToken, {
-        //     httpOnly: true,
-        //     secure: true, //only send cookie over https
-        //     sameSite: 'none',    // more look into this later!!!!!!
-        //     maxAge: 1000 * 60 * 60, //1h
-        // });
-
-
-        // // // store refresh token in cookie (long-lived)
-        // res.cookie('refreshToken', tokens.refreshToken, {
-        //     httpOnly: true,
-        //     secure: true, //only send cookie over https
-        //     sameSite: 'none',    // more look into this later!!!!!!
-        //     maxAge: 1000 * 60 * 60 * 24 * 7, //1 week
-        // });
 
 
 
@@ -755,47 +735,6 @@ export const resetPassword = async (req, res, next) => {
 
 
 
-// export const refresh = async (req, res, next) => {
-//     const { refreshToken } = req.cookies;
-//     if (!refreshToken) return res.status(401).json({ message: "No refresh token" });
-
-//     try {
-//         const tokenDecoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET)
-
-//         const user = await User.findById(tokenDecoded.id);
-
-//         if (!user || user.refreshToken !== refreshToken) {  //I only used this user.refreshToken !== refreshToken if i saved tokens in db as well
-//             return res.status(401).json({ message: "Invalid refresh token" });
-//         }
-
-//         const tokens = generateTokens(user);
-//         user.accessToken = tokens.accessToken;
-//         user.refreshToken = tokens.refreshToken;
-
-//         await user.save();
-
-//         // Reset cookies
-//         res.cookie("token", tokens.accessToken, {
-//             httpOnly: true,
-//             secure: true,
-//             sameSite: "none",
-//             maxAge: 1000 * 60 * 15,
-//         });
-
-//         res.cookie("refreshToken", tokens.refreshToken, {
-//             httpOnly: true,
-//             secure: true,
-//             sameSite: "none",
-//             maxAge: 1000 * 60 * 60 * 24 * 7,
-//         });
-
-
-//         res.json({ success: true, message: "Tokens refreshed" });
-//     } catch (error) {
-//         console.log(error)
-//         return res.status(403).json({ message: "Invalid refresh token session ended login again" })
-//     }
-// }
 
 
 export const refresh = async (req, res, next) => {

@@ -35,7 +35,8 @@
     "morgan": "~1.9.1",
     "nanoid": "^5.1.6",
     "nodemailer": "^7.0.5",
-    "redis": "^5.10.0"
+    "redis": "^5.10.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@eslint/js": "^9.33.0",
