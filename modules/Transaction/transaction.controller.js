@@ -79,7 +79,7 @@ const getAnalytics = async (filter) => {
       }),
 
 
-            Transaction.countDocuments({
+      Transaction.countDocuments({
         ...successFilter,
         deliveryStatus: 'delivered'
       }),
@@ -87,7 +87,7 @@ const getAnalytics = async (filter) => {
     ]);
 
 
-   
+
 
 
 
@@ -101,7 +101,7 @@ const getAnalytics = async (filter) => {
     const developersProfit = totalJBProfit * 0.26 || 0; // 20% of JBProfit
     const activeOrders = activeOrdersData || 0;
     const processingOrders = processingOrdersData || 0;
-    const deliveredOrders = deliveredOrderData || 0; 
+    const deliveredOrders = deliveredOrderData || 0;
 
 
     // Calculate total JBCP (baseCost - JBProfit for all successful transactions)
@@ -154,7 +154,7 @@ const getAnalytics = async (filter) => {
       totalRevenue: 0,
       totalOrders: 0,
       activeOrders: 0,
-      deliveredOrders:0,
+      deliveredOrders: 0,
       processingOrders: 0,
       totalJBProfit: 0,
       developersProfit: 0,
@@ -183,8 +183,6 @@ export const getTransactions = async (req, res) => {
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 10));
     const skip = (page - 1) * limit;
 
-
-   console.log("Transaction Migration successful")
 
     const {
       status,
@@ -311,12 +309,6 @@ export const getTransactions = async (req, res) => {
 
 
 
-
-
-
-
-
-
 //Update Transactions to delivered button
 
 export const updateDeliveryStatus = async (req, res) => {
@@ -335,16 +327,11 @@ export const updateDeliveryStatus = async (req, res) => {
     }
 
 
-     
-     console.log("UpdateDelivery migration successful")
 
     // Find the transaction
     //I have to change this later. made transactionID the value of reference
     // const transaction = await Transaction.findOne({ reference: transactionId });
-   const transaction = await Transaction.findOne({ reference: transactionId });
-
-
-    
+    const transaction = await Transaction.findOne({ reference: transactionId });
 
 
 
@@ -354,9 +341,6 @@ export const updateDeliveryStatus = async (req, res) => {
         message: 'Transaction not found'
       });
     }
-
-
-    
 
 
     // Check if transaction status is success
@@ -386,7 +370,7 @@ export const updateDeliveryStatus = async (req, res) => {
 
     // Update the transaction
     transaction.deliveryStatus = deliveryStatus;
-    
+
     if (deliveryStatus === 'failed') {
       transaction.failureReason = failureReason;
     }
@@ -412,14 +396,14 @@ export const updateDeliveryStatus = async (req, res) => {
       }
     });
 
-   
+
 
 
 
 
   } catch (error) {
     console.error('Error updating delivery status:', error);
-    
+
 
 
     if (error.statusCode) {
@@ -742,13 +726,67 @@ export const bulkMarkDelivered = async (req, res) => {
 // Get all bulk exports with their statuses
 export const getAllBulkExports = async (req, res) => {
   try {
-    const bulkExports = await BulkExport.find()
-      .sort({ createdAt: -1 })
-      .lean();
+
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 150));
+    const skip = (page - 1) * limit;
+
+    // Build sort object
+   const sort = { ["createdAt"]: "desc" === 'asc' ? 1 : -1 };
+
+    const [BulkExports, totalCount, totalBulkProcessing, totalBulkDelivered, totalBulkFailed] = await Promise.all([
+      //Get Paginated bulk-orders exported
+      BulkExport.find()
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+
+
+      //Get Total Count for Pagination
+      BulkExport.countDocuments(),
+
+      //Processing BulkExport Orders
+      BulkExport.countDocuments({
+        status: "processing"
+      }),
+
+      BulkExport.countDocuments({
+        status: "completed"
+      }), 
+
+      BulkExport.countDocuments({
+        status:"failed"
+      })
+    ])
+
+
+    const totalPages = Math.ceil(totalCount / limit)
+
+    const response = {
+      success: true,
+      data: {
+        bulkExport: BulkExports,
+        totalCount: totalCount,
+        totalBulkDelivered:totalBulkDelivered,
+        totalBulkProcessing:totalBulkProcessing,
+        totalBulkFailed:totalBulkFailed,
+        pagination: {
+          currentPage: page,
+          totalPages,
+          totalItems: totalCount,
+          itemsPerPage: limit,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1
+        }
+      }
+
+    }
+
 
     res.status(200).json({
       success: true,
-      exports: bulkExports
+      response,
     });
 
   } catch (error) {
