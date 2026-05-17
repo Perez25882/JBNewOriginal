@@ -1,13 +1,7 @@
 import Transaction from '../../models/transaction.model.js';
 import BulkExport from '../../models/bulkexport.model.js';
-
-
-
-
-
-
-
-
+import { getBossuBalance } from '../../utils/bossu-api-implementation.js';
+import mongoose from 'mongoose';
 
 
 // Helper function to generate unique export ID
@@ -27,7 +21,7 @@ const getAnalytics = async (filter) => {
     const successFilter = { ...filter, status: 'success' };
 
     // Aggregate analytics in parallel
-    const [revenueData, ordersData, profitData, costData, activeOrdersData, processingOrdersData, deliveredOrderData] = await Promise.all([
+    const [revenueData, ordersData, profitData, costData, activeOrdersData, processingOrdersData, deliveredOrderData, failedOrderData] = await Promise.all([
       // Total Revenue (sum of amounts for successful transactions)
       Transaction.aggregate([
         { $match: successFilter },
@@ -84,6 +78,11 @@ const getAnalytics = async (filter) => {
         deliveryStatus: 'delivered'
       }),
 
+      Transaction.countDocuments({
+        ...successFilter,
+        deliveryStatus: 'failed'
+      })
+
     ]);
 
 
@@ -102,6 +101,7 @@ const getAnalytics = async (filter) => {
     const activeOrders = activeOrdersData || 0;
     const processingOrders = processingOrdersData || 0;
     const deliveredOrders = deliveredOrderData || 0;
+    const failedOrders = failedOrderData || 0;
 
 
     // Calculate total JBCP (baseCost - JBProfit for all successful transactions)
@@ -134,6 +134,7 @@ const getAnalytics = async (filter) => {
       activeOrders,
       processingOrders,
       deliveredOrders,
+      failedOrders,
       totalJBProfit: parseFloat(totalJBProfit.toFixed(2)),
       developersProfit: parseFloat(developersProfit.toFixed(2)),
       totalCost: parseFloat(totalCost.toFixed(2)),
@@ -156,6 +157,7 @@ const getAnalytics = async (filter) => {
       activeOrders: 0,
       deliveredOrders: 0,
       processingOrders: 0,
+      failedOrders: 0, 
       totalJBProfit: 0,
       developersProfit: 0,
       totalCost: 0,
@@ -277,9 +279,12 @@ export const getTransactions = async (req, res) => {
     // Calculate pagination metadata
     const totalPages = Math.ceil(totalCount / limit);
 
+    //Getting BOSSU BALANCE
+    const bossuBalance =await getBossuBalance()
     const response = {
       success: true,
       data: {
+        bossuBalance: bossuBalance || 0,
         transactions: transactionsWithJBCP,
         analytics,
         pagination: {
@@ -310,7 +315,6 @@ export const getTransactions = async (req, res) => {
 
 
 //Update Transactions to delivered button
-
 export const updateDeliveryStatus = async (req, res) => {
 
   try {
@@ -420,8 +424,6 @@ export const updateDeliveryStatus = async (req, res) => {
     });
   }
 };
-
-
 
 
 
@@ -643,8 +645,6 @@ export const bulkExportTransactions = async (req, res) => {
 };
 
 
-
-
 // GET /api/v1/transactions/bulk-export/:exportId
 // Get all transactions for a specific export
 export const getBulkExportTransactions = async (req, res) => {
@@ -796,8 +796,166 @@ export const getAllBulkExports = async (req, res) => {
 };
 
 
+//FOR BOSSU API MARKER
+export const bulkDeliveryMarkerFetch = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+ 
+    // ✅ Validate query parameters exist
+    if (!startDate || !endDate) {
+      return res.status(400).json({
+        success: false,
+        message: "startDate and endDate are required query parameters"
+      });
+    }
+ 
+    // ✅ Validate ISO 8601 format and parse
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid date format. Use ISO 8601 (e.g., 2024-05-15T08:00:00.000Z)"
+      });
+    }
+ 
+    // ✅ Validate that end is after start
+    if (start >= end) {
+      return res.status(400).json({
+        success: false,
+        message: "End date must be after start date"
+      });
+    }
+ 
+    // ✅ Fetch transactions matching criteria
+    const transactions = await Transaction.find({
+      status: "success",                    // Only successful transactions
+      deliveryStatus: "processing",         // Only processing ones
+      createdAt: {
+        $gte: start,
+        $lte: end
+      }
+    })
+      .select([
+        '_id',
+        'reference',
+        'email',
+        'amount',
+        'status',
+        'deliveryStatus',
+        'createdAt',
+        'metadata'
+      ])
+      .lean()                               // Return plain JavaScript objects (faster)
+      .sort({ createdAt: -1 });             // Newest first
+ 
+    // ✅ Return response
+    return res.status(200).json({
+      success: true,
+      message: `Found ${transactions.length} transaction(s) in processing status`,
+      response: {
+        data: transactions,
+        meta: {
+          count: transactions.length,
+          timeRange: {
+            start: start.toISOString(),
+            end: end.toISOString()
+          }
+        }
+      }
+    });
+ 
+  } catch (error) {
+    console.error("Error fetching transactions for bulk delivery:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error while fetching transactions"
+    });
+  }
+};
 
 
-
+export const bulkMarkAsDelivered = async (req, res) => {
+  try {
+    const { transactionIds } = req.body;
+ 
+    // ✅ Validate input
+    if (!Array.isArray(transactionIds) || transactionIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "transactionIds must be a non-empty array of transaction IDs"
+      });
+    }
+ 
+    // ✅ Validate array size (prevent too large updates)
+    if (transactionIds.length > 1000) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot update more than 1000 transactions at once"
+      });
+    }
+ 
+    // ✅ Convert string IDs to MongoDB ObjectIds
+    let objectIds;
+    try {
+      objectIds = transactionIds.map(id => {
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+          throw new Error(`Invalid transaction ID: ${id}`);
+        }
+        return new mongoose.Types.ObjectId(id);
+      });
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid transaction ID format: ${error.message}`
+      });
+    }
+ 
+    // ✅ Perform bulk update
+    const result = await Transaction.updateMany(
+      {
+        _id: { $in: objectIds },
+        deliveryStatus: "processing"  // Extra safety: only update if still processing
+      },
+      {
+        $set: {
+          deliveryStatus: "delivered",
+          deliveredAt: new Date()
+        }
+      }
+    );
+ 
+ 
+    // ✅ Prepare response
+    const markedCount = result.modifiedCount;
+    const failedCount = transactionIds.length - markedCount;
+ 
+    return res.status(200).json({
+      success: true,
+      message: `Successfully marked ${markedCount} transaction(s) as delivered`,
+      response: {
+        data: {
+          markedCount,
+          failedCount,
+          totalRequested: transactionIds.length,
+          summary: {
+            timestamp: new Date().toISOString(),
+            message: failedCount > 0 
+              ? `${markedCount} marked, ${failedCount} already delivered or invalid`
+              : `All ${markedCount} transactions marked as delivered`
+          }
+        }
+      }
+    });
+ 
+  } catch (error) {
+    console.error("Error marking transactions as delivered For BOSSU:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error while marking transactions"
+    });
+  }
+};
 
 

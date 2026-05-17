@@ -7,7 +7,9 @@ import {
     getBulkExportTransactions, 
     bulkMarkDelivered, 
     getAllBulkExports,
-    updateDeliveryStatus
+    updateDeliveryStatus,
+    bulkMarkAsDelivered,
+    bulkDeliveryMarkerFetch
 
  } from '../Transaction/transaction.controller.js';
 
@@ -25,11 +27,17 @@ transactionRouter.post('/bulk-export', protect, authorizeRoles("admin"), general
 // Get list of bulk exports - GENERAL (read-only, admin)
 transactionRouter.get('/bulk-exports/list', protect, authorizeRoles("admin"), generalLimiter, getAllBulkExports);
 
+transactionRouter.get( '/bulk-delivery-marker',protect, authorizeRoles("admin"), generalLimiter, bulkDeliveryMarkerFetch)
+
 // Get specific bulk export - GENERAL (read-only, admin)
 transactionRouter.get('/bulk-export/:exportId', protect, authorizeRoles("admin"), generalLimiter, getBulkExportTransactions);
 
 // Mark as delivered - STRICT (write operation)
 transactionRouter.patch('/bulk-export/:exportId/mark-delivered', protect, authorizeRoles("admin"), lenientLimiter, bulkMarkDelivered);
+
+
+transactionRouter.patch('/bulk-mark-delivered',  protect , authorizeRoles("admin"),lenientLimiter, bulkMarkAsDelivered);
+
 
 // Get all transactions - GENERAL (read-only, admin)
 transactionRouter.get('/', protect, authorizeRoles("admin"), lenientLimiter, getTransactions);

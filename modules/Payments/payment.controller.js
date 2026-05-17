@@ -20,9 +20,6 @@ if (!PAYSTACK_SECRET_KEY) {
 
 // Constants
 const PAYSTACK_CHARGE_PERCENTAGE = 0.03; // 3%
-
-
-
 const paystack = axios.create({
     baseURL: 'https://api.paystack.co',
     headers: {

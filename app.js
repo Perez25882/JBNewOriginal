@@ -48,6 +48,7 @@ import payoutRouter from './modules/Payout/payout.route.js'; //working
 
 import resellerBundlePriceRouter from './modules/ResellerBundlesPrice/resellerBundlePrice.route.js'; //working
 
+import bossuRouter from "./modules/Bossu/bossu.route.js"
 
 
 
@@ -80,6 +81,7 @@ app.set('trust proxy', 1);
 // CORS configuration - MUST be before other middlewares
 const allowedOrigins = [
   "https://joy-bundle-frontend.vercel.app",
+  "https://c7f3-154-161-3-118.ngrok-free.app",
   "https://incurrable-wilhelmina-uncolloquially.ngrok-free.dev",
   "https://www.joydatabundle.com",
   "https://joydatabundle.com",
@@ -128,21 +130,6 @@ app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 
 
-
-// Apply Arcjet middleware to ALL routes EXCEPT webhook
-// app.use((req, res, next) => {
-//   // Skip Arcjet for Paystack webhook
-//   if (req.path === '/api/v1/payments/paystack/webhook') {
-//     return next();
-//   }
-  
-//   // Apply Arcjet for all other routes
-//   arcjetMiddleware(req, res, next);
-// });
-
-
-
-
 // Routes
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/users', userRouter);
@@ -153,6 +140,7 @@ app.use('/api/v1/commissions', commissionRouter);
 app.use('/api/v1/payout', payoutRouter);
 app.use('/api/v1/transaction', transactionRouter);
 app.use('/api/v1/resellerBundlePrice', resellerBundlePriceRouter );
+app.use('/api/v1/bossu', bossuRouter );
 
 
 

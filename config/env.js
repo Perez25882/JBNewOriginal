@@ -23,4 +23,9 @@ export const {
     REDIS_HOST,
     REDIS_PORT,
     REDIS_PASSWORD,
+    BOSSU_CALLBACK_URL,
+    BOSSU_API_KEY,
+    BOSSU_API_BASEURL,
+    BOSSU_API_ENDPOINT,
+    BOSSU_API_TIMEOUT,
 } = process.env;

@@ -2,7 +2,7 @@ import User from '../models/user.model.js';
 import Transaction from '../models/transaction.model.js';
 import Commission from '../models/commission.model.js';
 import { sendTransactionReceiptEmail } from "../services/emailServices/email.service.js";
-
+import { createBossuOrder } from "./bossu-api-implementation.js";
 
 
 // Separate async function for processing and Creating Transaction in DB
@@ -36,16 +36,49 @@ export async function processWebhookEvent(event) {
         await transaction.save();
 
 
-        //  await sendTransactionReceiptEmail ({
-        //             to: transaction.email,
 
-        //             amount: transaction.amount,
-        //             bundleName: transaction.bundleName,
-        //             reference: reference,
-        //             date: paid_at,
-        //             phoneNumber: transaction.metadata.phoneNumberReceivingData,
-        //             paymentMethod: channel,
-        //         })
+        //BOSSU API INTEGRATION STARTS HERE
+        let bossuResponse = null;
+        let bossuOrderCreated = false;
+        try {
+            console.log("About to make the BossuApi call")
+            bossuResponse = await createBossuOrder(transaction);
+            const bossuData = bossuResponse.data;
+            console.log("Successfully made the API call", bossuResponse)
+
+
+            if (bossuResponse.success = true) {
+                // ✅ Success - Save the response
+                transaction.bossuResponse = {
+                    order_id: bossuData.order_id,
+                    external_reference: bossuData.reference,
+                    status: bossuData.status,
+                    price: bossuData.price,
+                    recipient_phone: bossuData.recipient_phone,
+                    network: bossuData.network,
+                    package_key: bossuData.package_key,
+                    created_at: new Date(),
+                    updated_at: new Date(),
+                };
+            }
+
+            transaction.deliveryStatus = bossuData.status;
+            bossuOrderCreated = true;
+            await transaction.save();
+
+        } catch (bossuError) {
+            // Save error to transaction for tracking
+            transaction.bossuError = {
+                message: bossuError.message,
+                timestamp: new Date(),
+            };
+            
+            transaction.deliveryStatus = 'failed';
+            await transaction.save();
+            console.log('⚠️  Continuing with email despite Bossu error...');
+        }
+            ////BOSSU API INTEGRATION ENDS HERE
+
 
 
         //Fire and forget email sending - don't block main flow
@@ -60,15 +93,10 @@ export async function processWebhookEvent(event) {
         }).then(() => console.log('Receipt email sent')).catch(err => console.error('Failed to send receipt email (JS:60 Utils/payhelper):', err));
 
 
+
         // ✅ Commission logic - only after payment confirmed
         if (transaction.resellerCode && transaction.metadata?.resellerProfit) {
             const commissionAmount = transaction.metadata.resellerProfit;
-            
-
-
-         
-
-
             try {
 
                 // 1. Create Commission record
@@ -94,16 +122,12 @@ export async function processWebhookEvent(event) {
                     }
                 );
 
-                console.log(`✅ Commission: GHS ${commissionAmount} credited to ${transaction.metadata?.resellerName}`);
 
             } catch (error) {
-                console.error('❌ Error processing commission:', error);
-                // Don't throw - transaction already succeeded
-                // Log for manual review/reconciliation
+                console.error('❌❌❌ Error processing commission:', error);
+                
             }
         }
-
-        console.log('Transaction completed successfully:', reference);
     }
 
     // Handle failed charges
