@@ -99,6 +99,7 @@ const transactionSchema = new mongoose.Schema({
     status: String,                     // "pending", "completed", "failed"
     created_at: Date,
     updated_at: Date,
+    isIdempotent: Boolean,              // Indicates if this response was from an idempotent request
   },
 
   bossuError: {

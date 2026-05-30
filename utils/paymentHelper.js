@@ -46,38 +46,55 @@ export async function processWebhookEvent(event) {
             const bossuData = bossuResponse.data;
             console.log("Successfully made the API call", bossuResponse)
 
-
-            if (bossuResponse.success = true) {
-                // ✅ Success - Save the response
-                transaction.bossuResponse = {
-                    order_id: bossuData.order_id,
-                    external_reference: bossuData.reference,
-                    status: bossuData.status,
-                    price: bossuData.price,
-                    recipient_phone: bossuData.recipient_phone,
-                    network: bossuData.network,
-                    package_key: bossuData.package_key,
-                    created_at: new Date(),
-                    updated_at: new Date(),
+            if (bossuResponse.success === true) {
+                const isIdempotent = bossuResponse.message.includes("Existing order returned");
+                // Map Bossu API status to your DB enum
+                const statusMap = {
+                    'completed': 'delivered',
+                    'processing': 'processing',
+                    'pending': 'pending',
+                    'failed': 'failed'
                 };
+                const normalizedStatus = statusMap[bossuData.status] || bossuData.status;
+                if (isIdempotent) {
+                    // Idempotent response - limited data
+                    transaction.bossuResponse = {
+                        order_id: bossuData.order_id,
+                        status: bossuData.status,
+                        price: bossuData.price,
+                        created_at: bossuData.created_at,
+                        isIdempotent: true
+                    };
+                } else {
+                    // Fresh order creation - full data
+                    transaction.bossuResponse = {
+                        order_id: bossuData.order_id,
+                        external_reference: bossuData.reference,
+                        status: bossuData.status,
+                        price: bossuData.price,
+                        recipient_phone: bossuData.recipient_phone,
+                        network: bossuData.network,
+                        package_key: bossuData.package_key,
+                        isIdempotent: false
+                    };
+                }
+
+                transaction.deliveryStatus = normalizedStatus;
+                bossuOrderCreated = true;
+                await transaction.save();
             }
-
-            transaction.deliveryStatus = bossuData.status;
-            bossuOrderCreated = true;
-            await transaction.save();
-
         } catch (bossuError) {
             // Save error to transaction for tracking
             transaction.bossuError = {
                 message: bossuError.message,
                 timestamp: new Date(),
             };
-            
+
             transaction.deliveryStatus = 'failed';
             await transaction.save();
             console.log('⚠️  Continuing with email despite Bossu error...');
         }
-            ////BOSSU API INTEGRATION ENDS HERE
+        ////BOSSU API INTEGRATION ENDS HERE
 
 
 
@@ -125,7 +142,7 @@ export async function processWebhookEvent(event) {
 
             } catch (error) {
                 console.error('❌❌❌ Error processing commission:', error);
-                
+
             }
         }
     }

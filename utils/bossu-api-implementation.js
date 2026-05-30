@@ -19,6 +19,44 @@ const bossuClient = axios.create({
 });
 
 
+export const apiRequestWithRetry = async (BOSSU_API_ENDPOINT, payload) => {
+  let attempt = 0;
+  const maxRetries = 5;
+  let delay = 60000; // Start with 1 minute (60,000ms)
+  
+  while (attempt < maxRetries) {
+    try {
+      const response = await bossuClient.post(BOSSU_API_ENDPOINT, payload);
+      return response
+    } catch (error) {
+
+      attempt++;
+      // Check if error is retry-worthy
+      const statusCode = error.response?.status || error.statusCode;
+      const isRetryable = 
+        (statusCode >= 500) ||                    // 5xx server errors
+        (error.code === 'ECONNABORTED') ||       // Your 10s timeout
+        (error.code === 'ENOTFOUND') ||          // Network down
+        (error.code === 'ETIMEDOUT');            // Connection timeout
+      
+      // If not retryable or max retries reached, throw
+      if (!isRetryable || attempt === maxRetries) {
+        console.error(`RETRY Failed after final ${attempt} attempts.`);
+        throw error;
+      }
+      
+      // Log retry attempt
+      const delayMinutes = delay / 60000;
+      console.log(`⚠️ Attempt ${attempt}/${maxRetries} failed. Retrying in ${delayMinutes.toFixed(1)} minutes...`);
+      
+      // Wait before next retry
+      await new Promise(resolve => setTimeout(resolve, delay));
+      
+      // Exponential backoff: double the delay (1m → 2m → 4m → 8m)
+      delay *= 2;
+    }
+  }
+};
 
 
 
@@ -43,8 +81,7 @@ export async function createBossuOrder(transaction) {
       callback_url: BOSSU_CALLBACK_URL,
     };
 
-    const response = await bossuClient.post(BOSSU_API_ENDPOINT, payload);
-
+    const response = await apiRequestWithRetry(BOSSU_API_ENDPOINT, payload);
 
     if (response.data.success) {
       return response.data; // Return full response with nested data structure
@@ -87,6 +124,6 @@ export async function getBossuBalance(req, res) {
 
 
 export default {
-  createBossuOrder,
+   createBossuOrder,
   getBossuBalance
 };
