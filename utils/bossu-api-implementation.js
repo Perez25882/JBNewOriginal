@@ -5,7 +5,7 @@ import {
   BOSSU_API_BASEURL,
   BOSSU_API_ENDPOINT,
   BOSSU_API_TIMEOUT,
- } from "../config/env.js"
+} from "../config/env.js"
 
 
 
@@ -23,7 +23,7 @@ export const apiRequestWithRetry = async (BOSSU_API_ENDPOINT, payload) => {
   let attempt = 0;
   const maxRetries = 5;
   let delay = 60000; // Start with 1 minute (60,000ms)
-  
+
   while (attempt < maxRetries) {
     try {
       const response = await bossuClient.post(BOSSU_API_ENDPOINT, payload);
@@ -33,32 +33,35 @@ export const apiRequestWithRetry = async (BOSSU_API_ENDPOINT, payload) => {
       attempt++;
       // Check if error is retry-worthy
       const statusCode = error.response?.status || error.statusCode;
-      const isRetryable = 
+      const isRetryable =
         (statusCode >= 500) ||                    // 5xx server errors
         (error.code === 'ECONNABORTED') ||       // Your 10s timeout
         (error.code === 'ENOTFOUND') ||          // Network down
         (error.code === 'ETIMEDOUT');            // Connection timeout
-      
+
       // If not retryable or max retries reached, throw
       if (!isRetryable || attempt === maxRetries) {
         console.error(`RETRY Failed after final ${attempt} attempts.`);
+        console.log(`🔴 Error object:`, error);
+        console.log(`🔴 Status Code:`, statusCode);
+        console.log(`🔴 Error Code:`, error.code);
+        console.log(`🔴 Is Retryable:`, isRetryable);
+        console.log(`🔴 Response Data:`, error.response?.data);
         throw error;
       }
-      
+
       // Log retry attempt
       const delayMinutes = delay / 60000;
       console.log(`⚠️ Attempt ${attempt}/${maxRetries} failed. Retrying in ${delayMinutes.toFixed(1)} minutes...`);
-      
+
       // Wait before next retry
       await new Promise(resolve => setTimeout(resolve, delay));
-      
+
       // Exponential backoff: double the delay (1m → 2m → 4m → 8m)
       delay *= 2;
     }
   }
 };
-
-
 
 
 function transformBundleToPackageKey(bundleData) {
@@ -108,15 +111,15 @@ export async function createBossuOrder(transaction) {
 
 export async function getBossuBalance(req, res) {
   try {
-    const payload ={ action : "balance" }
+    const payload = { action: "balance" }
     const response = await bossuClient.post(BOSSU_API_ENDPOINT, payload);
-   if (response.data.success) {
+    if (response.data.success) {
       return response.data.data.balance; // Return full response with nested data structure
     } else {
-       console.error('❌ Bossu API error:', response.data.message);
+      console.error('❌ Bossu API error:', response.data.message);
       throw new Error(`Bossu API Error: ${response.data.message}`);
     }
-  }catch(error){
+  } catch (error) {
     console.error("❌Error Getting Bossu Balance", error.message)
   }
 };
@@ -124,6 +127,6 @@ export async function getBossuBalance(req, res) {
 
 
 export default {
-   createBossuOrder,
+  createBossuOrder,
   getBossuBalance
 };
