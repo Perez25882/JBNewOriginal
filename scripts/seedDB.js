@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
-
+import { nanoid } from "nanoid";
 // Import models
 import User from "../models/user.model.js";
 import Bundle from "../models/bundle.model.js";
@@ -126,6 +126,21 @@ const bundlesData = [
   },
 ];
  
+// Generate realistic Ghana phone numbers
+function generatePhoneNumber() {
+  const operators = ["024", "050", "055", "059", "026", "054"];
+  const operator = operators[Math.floor(Math.random() * operators.length)];
+  const rest = String(Math.floor(Math.random() * 10000000)).padStart(7, "0");
+  return operator + rest;
+}
+ 
+// Generate reseller code (like DAXO-5MjBiv)
+function generateResellerCode() {
+  const prefix = Math.random().toString(36).substring(2, 6).toUpperCase();
+  const suffix = nanoid(6);
+  return `${prefix}-${suffix}`;
+}
+ 
 async function seedDatabase() {
   try {
     console.log("🌱 Starting database seed...");
@@ -208,7 +223,7 @@ async function seedDatabase() {
         isApproved: true,
         status: "approved",
         role: "user",
-        resellerCode: `RESELLER_${String(idx + 1).padStart(3, "0")}`,
+        resellerCode: generateResellerCode(),
         commissionRate: 5 + Math.floor(Math.random() * 10), // 5-15%
         totalCommissionEarned: 0,
         totalCommissionPaidOut: 0,
@@ -231,11 +246,15 @@ async function seedDatabase() {
       // Create 10 transactions per user
       for (let txIdx = 0; txIdx < 10; txIdx++) {
         const bundle = bundles[txIdx % bundles.length];
-        const baseCost = bundle.JBCP;
-        const amount = baseCost + Math.floor(Math.random() * 10) + 5; // Add some markup
-        const reference = `TX-${user._id}-${Date.now()}-${txIdx}`;
+        const baseCost = bundle.JBCP; // Cost to JoyData
+        const customerPrice = baseCost + (Math.random() * 3 + 1); // Customer pays markup
+        const jbProfit = customerPrice - baseCost;
+        
+        const phoneNumber = generatePhoneNumber();
+        const timestamp = Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000; // Random past week
+        const reference = `JBpay_${timestamp}_${Math.floor(Math.random() * 1000000)}`;
  
-        // Create transaction
+        // Create transaction with realistic structure
         const transaction = await Transaction.create({
           email: user.email,
           bundleId: bundle._id,
@@ -243,36 +262,51 @@ async function seedDatabase() {
           JBCP: bundle.JBCP,
           bundleName: bundle.name,
           resellerCode: user.resellerCode,
-          baseCost: baseCost,
-          amount: amount,
-          JBProfit: amount - baseCost,
+          baseCost: baseCost, // What JoyData pays
+          amount: customerPrice, // What customer pays
+          JBProfit: jbProfit, // JoyData's profit
           currency: "GHS",
           reference: reference,
           status: "success",
           channel: "mobile_money",
           deliveryStatus: "delivered",
-          deliveredAt: new Date(),
-          provider_response: {},
-          metadata: { userId: user._id.toString() },
+          deliveredAt: new Date(timestamp),
+          provider_response: {
+            gateway_response: "Approved",
+            paid_at: new Date(timestamp).toISOString(),
+            ip_address: "154.161.140.236",
+          },
+          metadata: {
+            bundleId: bundle.Bundle_id,
+            bundleName: bundle.name,
+            bundleData: bundle.size,
+            network: bundle.network,
+            price: customerPrice,
+            phoneNumberReceivingData: phoneNumber,
+            resellerCode: user.resellerCode,
+            resellerId: user._id.toString(),
+            resellerName: user.name,
+            resellerCommissionPercentage: user.commissionRate,
+            resellerProfit: (customerPrice * user.commissionRate) / 100,
+          },
           bossuResponse: {
-            order_id: `ORDER_${Date.now()}_${txIdx}`,
+            order_id: `EXT_${timestamp}_${Math.floor(Math.random() * 10000)}`,
             network: bundle.network.toLowerCase(),
             package_key: bundle.size.toLowerCase(),
-            recipient_phone: user.phoneNumber,
+            recipient_phone: phoneNumber,
             external_reference: reference,
-            price: amount,
-            status: "completed",
-            created_at: new Date(),
-            updated_at: new Date(),
+            price: bundle.JBCP,
+            status: "processing",
             isIdempotent: false,
           },
+          bossuError: {},
         });
  
         totalTransactionsCreated++;
  
-        // Calculate commission (based on user's commission rate)
-        const commissionAmount = (amount * user.commissionRate) / 100;
-        const month = new Date().toISOString().substring(0, 7); // "2026-06"
+        // Calculate commission (based on customer price and reseller commission rate)
+        const commissionAmount = (customerPrice * user.commissionRate) / 100;
+        const month = new Date().toISOString().substring(0, 7);
  
         // Create commission
         const commission = await Commission.create({
@@ -303,7 +337,7 @@ async function seedDatabase() {
     // 5. Create Payouts for each reseller (2 payouts per user)
     console.log("💰 Creating payouts...");
     let totalPayoutsCreated = 0;
-    const networks = ["mtn", "telecel", "at"];
+    const networks = ["MTN", "Vodafone", "AirtelTigo"];
  
     for (let userIdx = 0; userIdx < resellerUsers.length; userIdx++) {
       const user = resellerUsers[userIdx];
@@ -313,7 +347,7 @@ async function seedDatabase() {
       // Create 2 payouts per user (split the commissions)
       for (let payoutIdx = 0; payoutIdx < 2; payoutIdx++) {
         const payoutAmount = totalCommission / 2; // Split in half
-        const payoutCharge = payoutAmount > 50 ? 2.5 : 1.5; // Charge depends on amount
+        const payoutCharge = payoutAmount > 50 ? 2.5 : 1.5;
         const netAmount = payoutAmount - payoutCharge;
  
         const payout = await Payout.create({
@@ -324,18 +358,18 @@ async function seedDatabase() {
           network: networks[payoutIdx % 3],
           phoneNumber: user.phoneNumber,
           accountName: user.name,
-          status: payoutIdx === 0 ? "completed" : "pending", // First one completed, second pending
-          requestedAt: new Date(Date.now() - payoutIdx * 7 * 24 * 60 * 60 * 1000), // Stagger dates
-          processedAt: payoutIdx === 0 ? new Date() : null,
-          processedBy: admins[0]._id,
-          transactionReference: `PAYOUT_${user._id}_${payoutIdx}`,
+          status: "pending",
+          requestedAt: new Date(Date.now() - payoutIdx * 7 * 24 * 60 * 60 * 1000),
+          processedAt: null,
+          processedBy: null,
+          transactionReference: `JBPAYOUT_${user._id}_${payoutIdx}`,
         });
  
         totalPayoutsCreated++;
       }
  
       // Update user's total payout
-      const payoutAmount = (user.totalCommissionEarned / 2) * 0.975; // 97.5% after charges
+      const payoutAmount = (user.totalCommissionEarned / 2) * 0.975;
       await User.findByIdAndUpdate(user._id, {
         totalCommissionPaidOut: payoutAmount,
       });
@@ -350,7 +384,7 @@ async function seedDatabase() {
     for (const user of resellerUsers) {
       for (const bundle of bundles) {
         const basePrice = bundle.JBSP;
-        const markup = Math.floor(Math.random() * 30) + 5; // 5-35 markup
+        const markup = Math.floor(Math.random() * 30) + 5;
         const customPrice = basePrice + markup;
  
         await ResellerBundlePrice.create({
