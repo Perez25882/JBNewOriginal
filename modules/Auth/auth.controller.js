@@ -235,9 +235,6 @@ export const signIn = async (req, res, next) => {
 
 
 
-
-
-
         //Clean put only userdata that are safe returning over here
         const safeUser = {
             _id: user._id,
@@ -248,25 +245,21 @@ export const signIn = async (req, res, next) => {
             createdAt: user.createdAt,
         };
 
-        //  pushing the token in a cookie
-        //   res.cookie('token', token,{
-        //     httpOnly:true ,
-        //     secure: process.env.NODE_ENV === 'production', //only send cookie over https
-        //     sameSite: process.env.NODE_ENV ==='production'? 'none': 'lax',    // more look into this later!!!!!!
-        //     maxAge: 1000 * 60 * 60 * 24 * 7, //1 week 
-        //   })
 
+    // ////   I will REMOVE THIS LATER
+    //     res.cookie('token', tokens.accessToken, {
+    //         httpOnly: true,
+    //         secure: false,
+    //         sameSite: 'lax',
+    //         maxAge: 1000 * 60 * 60
+    //     })
 
-
-        //ORIGINAL OVER HERE/////////////////////////////
-        // res.cookie('token', token, {
-        //     httpOnly: true,
-        //     secure: true, //only send cookie over https
-        //     sameSite: 'none',    // more look into this later!!!!!!
-        //     maxAge: 1000 * 60 * 60 * 24 * 7, //1 week 
-        // })
-
-
+    //     res.cookie('refreshToken', tokens.refreshToken, {
+    //         httpOnly: true,
+    //         secure: false,
+    //         sameSite: 'lax',
+    //         maxAge: 1000 * 60 * 60 * 24 * 7
+    //     })
 
 
         // I will remove this later, currently just for testing purposes
@@ -757,7 +750,7 @@ export const refresh = async (req, res, next) => {
         await user.save();
 
         const isProduction = NODE_ENV === 'production';
-
+        
         // Reset cookies
         res.cookie("token", tokens.accessToken, {
             httpOnly: true,
@@ -776,6 +769,10 @@ export const refresh = async (req, res, next) => {
             maxAge: 1000 * 60 * 60 * 24 * 7,
             path: '/',
         });
+
+
+
+        
 
         res.json({ success: true, message: "Tokens refreshed" });
     } catch (error) {

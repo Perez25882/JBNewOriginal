@@ -64,7 +64,6 @@ export const protect = async (req, res, next) => {
 }catch(error){
 
     return res.status(401).json({message: 'Forbidden: invalid or expired token', error: error.message})
-
 }
 
 }

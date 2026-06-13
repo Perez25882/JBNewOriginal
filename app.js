@@ -81,7 +81,7 @@ app.set('trust proxy', 1);
 // CORS configuration - MUST be before other middlewares
 const allowedOrigins = [
   "https://joy-bundle-frontend.vercel.app",
-  "https://c7f3-154-161-3-118.ngrok-free.app",
+  "https://1487-154-161-140-236.ngrok-free.app",
   "https://incurrable-wilhelmina-uncolloquially.ngrok-free.dev",
   "https://www.joydatabundle.com",
   "https://joydatabundle.com",
